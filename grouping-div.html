@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Auto Grouping with Add Component</title>
+    <style>
+      body {
+        margin: 0;
+        display: flex;
+        height: 100vh;
+        overflow: hidden;
+        background: #1e1e2e;
+        color: #fff;
+        font-family: Arial, sans-serif;
+      }
+
+      #controls {
+        width: 200px;
+        padding: 10px;
+        background: #2e2e3e;
+        border-right: 2px solid #444;
+      }
+
+      #canvas {
+        flex: 1;
+        position: relative;
+        border: 2px dashed #555;
+        margin: 20px;
+        overflow: hidden;
+      }
+
+      .draggable {
+        position: absolute;
+        width: 100px;
+        height: 100px;
+        background: rgba(0, 150, 255, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: grab;
+        user-select: none;
+        border-radius: 8px;
+      }
+
+      .group-highlight {
+        position: absolute;
+        border: 2px solid rgba(255, 69, 0, 0.8);
+        pointer-events: none;
+        z-index: 0;
+        border-radius: 12px;
+      }
+
+      #output {
+        width: 300px;
+        padding: 10px;
+        overflow: auto;
+        background: #2e2e3e;
+        border-left: 2px solid #444;
+      }
+
+      button {
+        padding: 8px 12px;
+        margin: 5px;
+        background: #0077ff;
+        border: none;
+        border-radius: 5px;
+        color: white;
+        cursor: pointer;
+      }
+
+      button:hover {
+        background: #0055cc;
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- Left Control Panel -->
+    <div id="controls">
+      <button id="addComponent">➕ Add Component</button>
+    </div>
+
+    <!-- Main Canvas -->
+    <div id="canvas">
+      <div class="draggable" style="left: 50px; top: 50px">Box 1</div>
+      <div class="draggable" style="left: 200px; top: 100px">Box 2</div>
+      <div class="draggable" style="left: 400px; top: 300px">Box 3</div>
+    </div>
+
+    <!-- Right Output Panel -->
+    <div id="output">HTML Output</div>
+
+    <script>
+      const canvas = document.getElementById("canvas");
+      const output = document.getElementById("output");
+      const addComponentBtn = document.getElementById("addComponent");
+      const THRESHOLD = 150;
+
+      let componentCount = 3;
+
+      // Make Elements Draggable
+      function makeDraggable(element) {
+        let offsetX = 0,
+          offsetY = 0,
+          isDragging = false;
+
+        element.addEventListener("mousedown", (e) => {
+          isDragging = true;
+          offsetX = e.clientX - element.offsetLeft;
+          offsetY = e.clientY - element.offsetTop;
+          element.style.zIndex = 10;
+
+          document.addEventListener("mousemove", onMouseMove);
+          document.addEventListener("mouseup", onMouseUp);
+        });
+
+        function onMouseMove(e) {
+          if (!isDragging) return;
+          element.style.left = `${e.clientX - offsetX}px`;
+          element.style.top = `${e.clientY - offsetY}px`;
+          detectGroups();
+        }
+
+        function onMouseUp() {
+          isDragging = false;
+          element.style.zIndex = 1;
+          document.removeEventListener("mousemove", onMouseMove);
+          document.removeEventListener("mouseup", onMouseUp);
+          updateOutput();
+        }
+      }
+
+      // Get Bounding Box of Group
+      function getBoundingBox(elements) {
+        const left = Math.min(...elements.map((el) => el.offsetLeft));
+        const top = Math.min(...elements.map((el) => el.offsetTop));
+        const right = Math.max(
+          ...elements.map((el) => el.offsetLeft + el.offsetWidth)
+        );
+        const bottom = Math.max(
+          ...elements.map((el) => el.offsetTop + el.offsetHeight)
+        );
+        return { left, top, width: right - left, height: bottom - top };
+      }
+
+      // Detect Groups Based on Proximity
+      function detectGroups() {
+        const elements = Array.from(document.querySelectorAll(".draggable"));
+        const groups = [];
+
+        elements.forEach((el) => {
+          let added = false;
+          for (const group of groups) {
+            if (group.some((item) => isNearby(item, el))) {
+              group.push(el);
+              added = true;
+              break;
+            }
+          }
+          if (!added) groups.push([el]);
+        });
+
+        visualizeGroups(groups);
+      }
+
+      // Check Proximity Between Elements
+      function isNearby(el1, el2) {
+        const rect1 = el1.getBoundingClientRect();
+        const rect2 = el2.getBoundingClientRect();
+        return (
+          Math.abs(rect1.left - rect2.left) < THRESHOLD &&
+          Math.abs(rect1.top - rect2.top) < THRESHOLD
+        );
+      }
+
+      // Visualize Group Bounding Boxes
+      function visualizeGroups(groups) {
+        document
+          .querySelectorAll(".group-highlight")
+          .forEach((el) => el.remove());
+
+        groups.forEach((group) => {
+          if (group.length > 1) {
+            const box = getBoundingBox(group);
+            const highlight = document.createElement("div");
+            highlight.className = "group-highlight";
+            highlight.style.left = `${box.left}px`;
+            highlight.style.top = `${box.top}px`;
+            highlight.style.width = `${box.width}px`;
+            highlight.style.height = `${box.height}px`;
+            canvas.appendChild(highlight);
+          }
+        });
+      }
+
+      // Update Live HTML Output
+      function updateOutput() {
+        const elements = Array.from(document.querySelectorAll(".draggable"));
+        const groups = [];
+
+        elements.forEach((el) => {
+          let added = false;
+          for (const group of groups) {
+            if (group.some((item) => isNearby(item, el))) {
+              group.push(el);
+              added = true;
+              break;
+            }
+          }
+          if (!added) groups.push([el]);
+        });
+
+        const html = groups
+          .map((group) => {
+            if (group.length > 1) {
+              return (
+                `<div class="group">\n` +
+                group.map((el) => `  <div>${el.textContent}</div>`).join("\n") +
+                `\n</div>`
+              );
+            }
+            return `<div>${group[0].textContent}</div>`;
+          })
+          .join("\n");
+
+        output.textContent = html;
+      }
+
+      // Add New Component
+      addComponentBtn.addEventListener("click", () => {
+        componentCount++;
+        const newBox = document.createElement("div");
+        newBox.className = "draggable";
+        newBox.textContent = `Box ${componentCount}`;
+        newBox.style.left = "100px";
+        newBox.style.top = "100px";
+        canvas.appendChild(newBox);
+        makeDraggable(newBox);
+        detectGroups();
+      });
+
+      // Initialize
+      document.querySelectorAll(".draggable").forEach(makeDraggable);
+      detectGroups();
+    </script>
+  </body>
+</html>
